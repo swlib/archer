@@ -65,7 +65,7 @@ class Queue
         return $this->channel_queuing->push($task);
     }
 
-    public function loop()
+    public function loop(): void
     {
         do {
             $task = $this->channel_queuing->pop();

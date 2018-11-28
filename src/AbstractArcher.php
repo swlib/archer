@@ -129,6 +129,55 @@ abstract class AbstractArcher
     }
 
     /**
+     * 设置一个在指定时间后执行一次的Task，该Task并没有投递进入队列，所以不受队列size和最大并发数的影响。
+     * Archer会捕获Task抛出的异常并产生一个warnning.
+     *
+     * @param int      $after_time_ms 计时时间，单位为毫秒
+     * @param callable $task_callback
+     *                                需要执行的函数
+     * @param array    $params
+     *                                传递进$task_callback中的参数，可缺省
+     *
+     * @return Task\Timer\Once 刚生成的Task
+     */
+    public static function taskTimerAfter(int $after_time_ms, callable $task_callback, ?array $params = null): Task\Timer\Once
+    {
+        $task = new Task\Timer\Once($task_callback, $params, $after_time_ms);
+        TimerHeap::getInstance()->insert($task);
+
+        return $task;
+    }
+
+    /**
+     * 设置一个间隔时钟定时器，该Task并没有投递进入队列，所以不受队列size和最大并发数的影响。
+     * Archer会捕获Task抛出的异常并产生一个warnning.
+     *
+     * @param int      $tick_time_ms     每次执行间隔时间，单位为毫秒
+     * @param callable $task_callback    需要执行的函数
+     * @param array    $params           传递进$task_callback中的参数，可缺省
+     * @param int      $first_time_after 初次执行时间，单位为毫秒；若缺省，则初次执行时间与$tick_time_ms相等
+     *
+     * @return Task\Timer\Tick 刚生成的Task
+     */
+    public static function taskTimerTick(int $tick_time_ms, callable $task_callback, ?array $params = null, ?int $first_time_after = null): Task\Timer\Tick
+    {
+        $task = new Task\Timer\Tick($task_callback, $params, $tick_time_ms, $first_time_after ?? $tick_time_ms);
+        TimerHeap::getInstance()->insert($task);
+
+        return $task;
+    }
+
+    /**
+     * @param int $task_id 通过 $task->getId() 获得
+     *
+     * @return bool 是否成功删除；删除失败是因为已经执行或taskid不存在
+     */
+    public static function clearTimerTask(int $task_id): bool
+    {
+        return TimerHeap::getInstance()->delete($task_id);
+    }
+
+    /**
      * 获取多Task的处理容器，每次执行都是获取一个全新的对象
      *
      * @return Archer\MultiTask

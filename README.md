@@ -6,7 +6,7 @@
 
 ## 简介
 
- 协程Task弓兵, `Swoole人性化组件库`之PHP高性能Task队列, 基于Swoole原生协程, 底层提供无额外I/O的高性能解决方案, 让开发者专注于功能开发, 从繁琐的传统Task队列或协程并发旋涡中解放.
+ 协程Task弓兵, `Swoole人性化组件库`之PHP高性能Task队列, 基于Swoole原生协程, 底层提供无额外I/O的高性能解决方案, 让开发者专注于功能开发, 从繁琐的传统Task队列或协程并发旋涡中解放。
 
 - 基于Swoole协程开发, 以单进程协程实现Swoole Task提供的所有功能
 - 人性化使用风格, API简单易用, 符合传统同步代码开发逻辑习惯，支持psr风格操作
@@ -14,6 +14,7 @@
 - 多种Task模式（伪异步、协程同步、Defer模式多任务集合）等，满足各种开发情景
 - 轻松将任意协程代码变为Defer模式，不用刻意修改为defer()与recv()。
 - 可以将任意协程代码并发执行而不改变原先设计模式。
+- 基于协程实现的毫秒级计时器
 
 ------
 <br>
@@ -67,7 +68,11 @@ go(function () {
     var_dump($task1->recv());
     var_dump($task2->recv());
     var_dump($task3->recv());
-})
+    
+    Archer::taskTimerAfter(1500, function (string $s1, string $s2) {
+        echo "1.5s later:{$s1} {$s2}\n";
+    }, ['hello', 'world']);
+});
 ```
 
 
@@ -80,7 +85,7 @@ go(function () {
 ```php
 \Swlib\Archer::task(callable $task_callback, ?array $params = null, ?callable $finish_callback = null): int;
 ```
-- `$task_callback` Task闭包，
+- `$task_callback` 待执行的函数，
 - `$params` 传入`$task_callback`中的参数，可缺省
 - `$finish_callback` Task执行完之后的回调，可缺省，格式如下：
 
@@ -99,7 +104,7 @@ function (int $task_id, $task_return_value, ?\Throwable $e) {
 ```php
 \Swlib\Archer::taskWait(callable $task_callback, ?array $params = null, ?float $timeout = null): mixed;
 ```
-- `$task_callback` Task闭包，
+- `$task_callback` 待执行的函数，
 - `$params` 传入`$task_callback`中的参数，可缺省
 - `$timeout` 超时时间，超时后函数会直接抛出`Swlib\Archer\Exception\TaskTimeoutException`。注意：超时返回后Task仍会继续执行，不会中断，不会移出队列。若缺省则表示不会超时
 
@@ -136,7 +141,7 @@ $container = \Swlib\Archer::getMultiTask();
 ```php
 $container->addTask(callable $task_callback, ?array $params = null): int;
 ```
-两种执行模式：
+两种执行方式：
 ###### 等待全部结果：等待所有Task全部执行完。返回值为键值对，键为Taskid，值为其对应的返回值
 ```php
 $container->waitForAll(?float $timeout = null): array;
@@ -166,6 +171,49 @@ $container->getError(int $id): ?\Throwable;
 ```php
 $container->getErrorMap(): array;
 ```
+### 模式5：一次性Timer模式
+该模式的Task不受[队列的配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)影响  
+（该模式与直接使用co::sleep()执行协程代码的区别在于：不直接阻塞当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
+```php
+\Swlib\Archer::taskTimerAfter(int $after_time_ms, callable $task_callback, ?array $params = null): \Swlib\Archer\Task\Timer\Once;
+```
+- `$after_time_ms` 计时时间，单位为毫秒
+| 返回模式 | 协程说明 | 异常处理 |
+| :-- | :-- | :-- |
+| 返回 Task对象 | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warnning |
+
+取消执行：
+```php
+$task = \Swlib\Archer::taskTimerAfter(1000, function() { echo 'aaa'; });
+$task->clearTimer(); // 返回true为成功，若已执行则返回false
+
+// 或这样：
+$taskid = \Swlib\Archer::taskTimerAfter(1000, function() { echo 'aaa'; })->getId();
+\Swlib\Archer::clearTimerTask($taskid); // 返回true为成功，若已执行则返回false
+```
+### 模式6：持续型Timer模式
+该模式的Task不受[队列的配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)影响  
+（该模式与直接使用co::sleep()执行协程代码的区别在于：不直接阻塞当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
+```php
+\Swlib\Archer::taskTimerTick(int $tick_time_ms, callable $task_callback, ?array $params = null, ?int $first_time_after = null): \Swlib\Archer\Task\Timer\Tick;
+```
+- `$tick_time_ms` 执行间隔，单位为毫秒
+- `$first_time_after` 初次执行计时器，单位为毫秒。若缺省则与`$tick_time_ms`相同
+| 返回模式 | 协程说明 | 异常处理 |
+| :-- | :-- | :-- |
+| 返回 Task对象 | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warnning |
+
+取消执行：
+```php
+$task = \Swlib\Archer::taskTimerTick(1000, function() { echo 'tick'; });
+$task->clearTimer(); // 返回true为成功，若已被清理则返回false
+
+// 或这样：
+$taskid = \Swlib\Archer::taskTimerTick(1000, function() { echo 'aaa'; })->getId();
+\Swlib\Archer::clearTimerTask($taskid); // 返回true为成功，若已被清理则返回false
+```
+
+
 ### psr风格
 ```php
 $archer = \Swlib\Archer::psr();
@@ -182,7 +230,7 @@ $archer->asyncExecute(
     }
 ); 
 
-// 同 模式2：协程同步返回模式
+// 同 模式2：协程同步返回模式（参数表示超时时间，单位为秒）
 $archer->waitExecute(2.0); 
 
 // 同 模式3：Defer模式
@@ -194,7 +242,18 @@ $container = \Swlib\Archer::getMultiTask();
 $archer->attachToMultiTask($container);
 $archer->attachToMultiTask($container);
 $container->waitForAll(2.0);
+
+// 同 模式5：一次性Timer模式（参数表示计时时间，单位为毫秒）
+$archer->afterTimeExecute(1000); 
+
+// 同 模式6：持续型Timer模式（参数1表示执行间隔，参数2表示初次执行计时器，单位均为毫秒。参数2可缺省）
+$archer->tickExecute(1000, 500); 
 ```
+### 在Task内获取当前的Taskid
+```php
+\Swlib\Archer\Task::getCurrentTaskId(): ?int;
+```
+在Task内调用该方法可以获取当前的Taskid，在其他地方调用会返回false
 
 ### ~~注册一个全局回调函数~~
 `swoole>=4.2.9`版本推荐在项目使用Context的时候通过[Coroutine::defer](https://wiki.swoole.com/wiki/page/1015.html)注册清理函数，无需在此注册

@@ -13,6 +13,7 @@ namespace Swlib\Archer;
 
 abstract class Task
 {
+    protected static $taskid_map = [];
     protected static $finish_func;
     protected $task_callback;
     protected $params;
@@ -24,6 +25,21 @@ abstract class Task
         $this->id = ++self::$counter;
         $this->task_callback = $task_callback;
         $this->params = $params ?? [];
+    }
+
+    /**
+     * 在Task内调用可以获取当前的Taskid，否则会返回null.
+     *
+     * @return null|int
+     */
+    public static function getCurrentTaskId(): ?int
+    {
+        $uid = \Swoole\Coroutine::getuid();
+        if (array_key_exists($uid, self::$taskid_map)) {
+            return self::$taskid_map[$uid];
+        }
+
+        return null;
     }
 
     /**
@@ -43,9 +59,17 @@ abstract class Task
 
     abstract public function execute();
 
-    protected function callFunc(&$ret): ?\Throwable
+    protected function callFunc(&$ret, bool $clear_after_finish = true): ?\Throwable
     {
+        if (!isset($this->task_callback)) {
+            throw new Exception\RuntimeException(
+                'Task already executed. This maybe caused by manually calling execute().'
+            );
+        }
+
         try {
+            $uid = \Swoole\Coroutine::getuid();
+            self::$taskid_map[$uid] = $this->id;
             $ret = ($this->task_callback)(...$this->params);
             $return = null;
             if (isset(self::$finish_func)) {
@@ -57,8 +81,11 @@ abstract class Task
                 (self::$finish_func)($this->id, null, $e);
             }
         }
-        $this->task_callback = null;
-        $this->params = null;
+        unset(self::$taskid_map[$uid]);
+        if ($clear_after_finish) {
+            $this->task_callback = null;
+            $this->params = null;
+        }
         \Swlib\Archer\Queue::getInstance()->taskOver();
 
         return $return;

@@ -93,6 +93,33 @@ class Archer extends Archer\AbstractArcher
     }
 
     /**
+     * 设置一个在指定时间后执行一次的Task，该Task并没有投递进入队列，所以不受队列size和最大并发数的影响。
+     * Archer会捕获Task抛出的异常并产生一个warnning.
+     *
+     * @param int $after_time_ms 计时时间，单位为毫秒
+     *
+     * @return Task\Timer\Once 刚生成的Task
+     */
+    public function afterTimeExecute(int $after_time_ms): Archer\Task\Timer\Once
+    {
+        return self::taskTimerAfter($after_time_ms, $this->task_callback, $this->params);
+    }
+
+    /**
+     * 设置一个间隔时钟定时器，该Task并没有投递进入队列，所以不受队列size和最大并发数的影响。
+     * Archer会捕获Task抛出的异常并产生一个warnning.
+     *
+     * @param int $tick_time_ms     每次执行间隔时间，单位为毫秒
+     * @param int $first_time_after 初次执行时间，单位为毫秒；若缺省，则初次执行时间与$tick_time_ms相等
+     *
+     * @return Task\Timer\Tick 刚生成的Task
+     */
+    public function tickExecute(int $tick_time_ms, ?int $first_time_after = null): Archer\Task\Timer\Tick
+    {
+        return self::taskTimerTick($tick_time_ms, $this->task_callback, $this->params, $first_time_after);
+    }
+
+    /**
      * 这个方法会向队列投递Task并立即返回Task id
      * 注意：Task执行时的协程与当前协程不是同一个.
      *
