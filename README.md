@@ -171,8 +171,8 @@ $container->getError(int $id): ?\Throwable;
 ```php
 $container->getErrorMap(): array;
 ```
-### 模式5：一次性Timer模式
-该模式的Task不受[队列的配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)影响  
+### 模式5：一次性计时器模式
+该模式的Task不受[队列配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)的影响  
 （该模式与直接使用co::sleep()执行协程代码的区别在于：不直接切换走当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
 ```php
 \Swlib\Archer::taskTimerAfter(int $after_time_ms, callable $task_callback, ?array $params = null): \Swlib\Archer\Task\Timer\Once;
@@ -192,8 +192,8 @@ $task->clearTimer(); // 返回true为成功，若已执行则返回false
 $taskid = \Swlib\Archer::taskTimerAfter(1000, function() { echo 'aaa'; })->getId();
 \Swlib\Archer::clearTimerTask($taskid); // 返回true为成功，若已执行则返回false
 ```
-### 模式6：持续型Timer模式
-该模式的Task不受[队列的配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)影响  
+### 模式6：持续型计时器模式
+该模式的Task不受[队列配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)的影响  
 （该模式与直接使用co::sleep()执行协程代码的区别在于：不直接切换走当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
 ```php
 \Swlib\Archer::taskTimerTick(int $tick_time_ms, callable $task_callback, ?array $params = null, ?int $first_time_after = null): \Swlib\Archer\Task\Timer\Tick;
@@ -245,20 +245,20 @@ $archer->attachToMultiTask($container);
 $archer->attachToMultiTask($container);
 $container->waitForAll(2.0);
 
-// 同 模式5：一次性Timer模式（参数表示计时时间，单位为毫秒）
+// 同 模式5：一次性计时器模式（参数表示计时时间，单位为毫秒）
 $archer->afterTimeExecute(1000); 
 
-// 同 模式6：持续型Timer模式（参数1表示执行间隔，参数2表示初次执行计时器，单位均为毫秒。参数2可缺省）
+// 同 模式6：持续型计时器模式（参数1表示执行间隔，参数2表示初次执行计时器，单位均为毫秒。参数2可缺省）
 $archer->tickExecute(1000, 500); 
 ```
 ### 在Task内获取当前的Taskid
 ```php
 \Swlib\Archer\Task::getCurrentTaskId(): ?int;
 ```
-在Task内调用该方法可以获取当前的Taskid，在其他地方调用会返回false
+在Task执行中，调用该方法可以获取当前的Taskid，在其他地方调用会返回null（该方法基于协程uid缓存）
 
 ### ~~注册一个全局回调函数~~
-`swoole>=4.2.9`版本推荐在项目使用Context的时候通过[Coroutine::defer](https://wiki.swoole.com/wiki/page/1015.html)注册清理函数，无需在此注册
+`swoole>=4.2.9`版本推荐在项目使用Context的时候通过[Coroutine::defer()](https://wiki.swoole.com/wiki/page/1015.html)注册清理函数，无需在此注册
 ```php
 \Swlib\Archer\Task::registerTaskFinishFunc(callable $func): void;
 ```
