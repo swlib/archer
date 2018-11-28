@@ -173,11 +173,12 @@ $container->getErrorMap(): array;
 ```
 ### 模式5：一次性Timer模式
 该模式的Task不受[队列的配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)影响  
-（该模式与直接使用co::sleep()执行协程代码的区别在于：不直接阻塞当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
+（该模式与直接使用co::sleep()执行协程代码的区别在于：不直接切换走当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
 ```php
 \Swlib\Archer::taskTimerAfter(int $after_time_ms, callable $task_callback, ?array $params = null): \Swlib\Archer\Task\Timer\Once;
 ```
 - `$after_time_ms` 计时时间，单位为毫秒
+
 | 返回模式 | 协程说明 | 异常处理 |
 | :-- | :-- | :-- |
 | 返回 Task对象 | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warnning |
@@ -193,12 +194,13 @@ $taskid = \Swlib\Archer::taskTimerAfter(1000, function() { echo 'aaa'; })->getId
 ```
 ### 模式6：持续型Timer模式
 该模式的Task不受[队列的配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)影响  
-（该模式与直接使用co::sleep()执行协程代码的区别在于：不直接阻塞当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
+（该模式与直接使用co::sleep()执行协程代码的区别在于：不直接切换走当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
 ```php
 \Swlib\Archer::taskTimerTick(int $tick_time_ms, callable $task_callback, ?array $params = null, ?int $first_time_after = null): \Swlib\Archer\Task\Timer\Tick;
 ```
 - `$tick_time_ms` 执行间隔，单位为毫秒
 - `$first_time_after` 初次执行计时器，单位为毫秒。若缺省则与`$tick_time_ms`相同
+
 | 返回模式 | 协程说明 | 异常处理 |
 | :-- | :-- | :-- |
 | 返回 Task对象 | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warnning |
@@ -398,6 +400,16 @@ foreach ($container->yieldEachOne(10) as $taskid=>$count) {
 foreach ($map as $taskid => $id)
     $server->send($id, 'Error: ' . $container->getError($taskid)->getMessage());
 
+```
+#### 场景：计时器，2.5秒后开始第一次，之后每5秒执行一次，共8次
+```php
+\Swlib\Archer::taskTimerTick(5000, function(int $limit) {
+    static $count = 0;
+    ++ $count;
+    echo "$count\n";
+    if ($count >= $limit)
+        \Swlib\Archer::clearTimerTask(\Swlib\Archer\Task::getCurrentTaskId());
+}, [8], 2500);
 ```
 
 ------
