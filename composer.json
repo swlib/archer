@@ -1,0 +1,28 @@
+{
+	"name" : "swlib/archer",
+	"description" : "Swoole coroutine task kit",
+	"license" : "Apache-2.0",
+	"keywords" : [
+		"php",
+		"swoole",
+		"client",
+		"psr7",
+		"coroutine",
+		"task"
+	],
+	"require" : {
+		"php" : ">=7.1"
+	},
+	"autoload" : {
+		"classmap" : [
+			"src/Archer.php"
+		],
+		"psr-4" : {
+			"Swlib\\Archer\\" : "src"
+		}
+	},
+	"config" : {
+		"optimize-autoloader" : true,
+		"sort-packages" : true
+	}
+}
