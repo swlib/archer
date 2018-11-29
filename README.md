@@ -9,7 +9,7 @@
  协程Task弓兵, `Swoole人性化组件库`之PHP高性能Task队列, 基于Swoole原生协程, 底层提供无额外I/O的高性能解决方案, 让开发者专注于功能开发, 从繁琐的传统Task队列或协程并发旋涡中解放。
 
 - 基于Swoole协程开发, 以单进程协程实现Swoole Task提供的所有功能
-- 人性化使用风格, API简单易用, 符合传统同步代码开发逻辑习惯，支持psr风格操作
+- 人性化使用风格, API简单易用, 符合传统同步代码开发逻辑习惯
 - 完备的Exception异常事件, 符合面向对象的基本思路, 避免陷入若类型陷阱
 - 多种Task模式（伪异步、协程同步、Defer模式多任务集合）等，满足各种开发情景
 - 轻松将任意协程代码变为Defer模式，不用刻意修改为defer()与recv()。
@@ -21,7 +21,7 @@
 
 ## 安装
 
-最好的安装方法是通过 [Composer](http://getcomposer.org/) 包管理器 :（然而现在暂时并不支持这么安装，正在与官方争取加入swlib）
+最好的安装方法是通过 [Composer](http://getcomposer.org/) 包管理器 :**（然而现在暂时并不支持这么安装，正在与官方争取加入swlib）**
 
 ```shell
 composer require swlib/archer
@@ -56,20 +56,19 @@ Archer运行于全协程的场景中，禁忌同步阻塞代码的出现，会�
 ```php
 \Swoole\Runtime::enableCoroutine();
 go(function () {
-    $archer = \Swlib\Archer::psr();
-    $archer->setTaskCallback(function(string $method, ...$param) {
+    $callback = function(string $method, ...$param) {
         $redis = new \Redis();
         $redis->connect('127.0.0.1', 6379);
         return $redis->{$method}(...$param);
-    });
-    $task1 = $archer->setParams('get', 'some_key')->deferExecute();
-    $task2 = $archer->setParams('hget', 'a', 'b')->deferExecute();
-    $task3 = $archer->setParams('lget', 'k1', 10)->deferExecute();
+    };
+    $task1 = \Swlib\Archer::taskDefer($callback, ['get', 'some_key']);
+    $task2 = \Swlib\Archer::taskDefer($callback, ['hget', 'a', 'b']);
+    $task3 = \Swlib\Archer::taskDefer($callback, ['lget', 'k1', 10]);
     var_dump($task1->recv());
     var_dump($task2->recv());
     var_dump($task3->recv());
     
-    Archer::taskTimerAfter(1500, function (string $s1, string $s2) {
+    Archer::taskTimerAfter(1.5, function (string $s1, string $s2) {
         echo "1.5s later:{$s1} {$s2}\n";
     }, ['hello', 'world']);
 });
@@ -80,7 +79,6 @@ go(function () {
 
 ## 接口
 所有模式的Task在执行时所处的协程与原协程不是同一个，所以**所有基于[Context](https://wiki.swoole.com/wiki/page/865.html)的变量传递与维护会失效**，务必注意这一点。  
-`psr`风格的接口在[下文](https://github.com/fdreamsu/SwArcher#psr风格)
 ### 模式1：伪异步模式
 ```php
 \Swlib\Archer::task(callable $task_callback, ?array $params = null, ?callable $finish_callback = null): int;
@@ -98,7 +96,7 @@ function (int $task_id, $task_return_value, ?\Throwable $e) {
 ```
 | 返回模式 | 协程说明 | 异常处理 |
 | :-- | :-- | :-- |
-| 返回 Taskid | $task_callback与$finish_callback处于同一个协程，但与当前协程不处于同一个 | 通过第3个参数传递给$finish_callback，若缺省则会产生一个warnning |
+| 返回 Taskid | $task_callback与$finish_callback处于同一个协程，但与当前协程不处于同一个 | 通过第3个参数传递给$finish_callback，若缺省则会产生一个warning |
 ### 模式2：协程同步返回模式
 （该模式与直接执行协程代码的区别在于：会进入Task队列，受队列的size和最大并发影响；运行于不同的协程）
 ```php
@@ -175,82 +173,38 @@ $container->getErrorMap(): array;
 该模式的Task不受[队列配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)的影响  
 （该模式与直接使用co::sleep()执行协程代码的区别在于：不直接切换走当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
 ```php
-\Swlib\Archer::taskTimerAfter(int $after_time_ms, callable $task_callback, ?array $params = null): \Swlib\Archer\Task\Timer\Once;
+\Swlib\Archer::taskTimerAfter(float $after_time, callable $task_callback, ?array $params = null): int;
 ```
-- `$after_time_ms` 计时时间，单位为毫秒
+- `$after_time` 计时时间，单位为秒
 
 | 返回模式 | 协程说明 | 异常处理 |
 | :-- | :-- | :-- |
-| 返回 Task对象 | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warnning |
+| 返回 Taskid | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warning |
 
 取消执行：
 ```php
-$task = \Swlib\Archer::taskTimerAfter(1000, function() { echo 'aaa'; });
-$task->clearTimer(); // 返回true为成功，若已执行则返回false
-
-// 或这样：
-$taskid = \Swlib\Archer::taskTimerAfter(1000, function() { echo 'aaa'; })->getId();
+$taskid = \Swlib\Archer::taskTimerAfter(1.5, function() { echo 'aaa'; });
 \Swlib\Archer::clearTimerTask($taskid); // 返回true为成功，若已执行则返回false
 ```
 ### 模式6：持续型计时器模式
 该模式的Task不受[队列配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)的影响  
 （该模式与直接使用co::sleep()执行协程代码的区别在于：不直接切换走当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
 ```php
-\Swlib\Archer::taskTimerTick(int $tick_time_ms, callable $task_callback, ?array $params = null, ?int $first_time_after = null): \Swlib\Archer\Task\Timer\Tick;
+\Swlib\Archer::taskTimerTick(float $tick_time, callable $task_callback, ?array $params = null, ?float $first_time_after = null): int;
 ```
-- `$tick_time_ms` 执行间隔，单位为毫秒
-- `$first_time_after` 初次执行计时器，单位为毫秒。若缺省则与`$tick_time_ms`相同
+- `$tick_time` 执行间隔，单位为秒
+- `$first_time_after` 初次执行计时器，单位为秒。若缺省则与`$tick_time`相同
 
 | 返回模式 | 协程说明 | 异常处理 |
 | :-- | :-- | :-- |
-| 返回 Task对象 | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warnning |
+| 返回 Taskid | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warning |
 
 取消执行：
 ```php
-$task = \Swlib\Archer::taskTimerTick(1000, function() { echo 'tick'; });
-$task->clearTimer(); // 返回true为成功，若已被清理则返回false
-
-// 或这样：
-$taskid = \Swlib\Archer::taskTimerTick(1000, function() { echo 'aaa'; })->getId();
+$taskid = \Swlib\Archer::taskTimerTick(1.5, function() { echo 'aaa'; });
 \Swlib\Archer::clearTimerTask($taskid); // 返回true为成功，若已被清理则返回false
 ```
 
-
-### psr风格
-```php
-$archer = \Swlib\Archer::psr();
-$archer->setTaskCallback(
-    function($par1, $par2) {
-        // task to do
-    }
-)->setParams('foo', 'barr'); //支持任意多个参数
-
-// 同 模式1：伪异步模式:
-$archer->asyncExecute(
-    function (int $task_id, $task_return_value, ?\Throwable $e) {
-        // receive task result
-    }
-); 
-
-// 同 模式2：协程同步返回模式（参数表示超时时间，单位为秒）
-$archer->waitExecute(2.0); 
-
-// 同 模式3：Defer模式
-$task = $archer->deferExecute();
-$task->recv(); 
-
-// 同 模式4：Task集模式
-$container = \Swlib\Archer::getMultiTask();
-$archer->attachToMultiTask($container);
-$archer->attachToMultiTask($container);
-$container->waitForAll(2.0);
-
-// 同 模式5：一次性计时器模式（参数表示计时时间，单位为毫秒）
-$archer->afterTimeExecute(1000); 
-
-// 同 模式6：持续型计时器模式（参数1表示执行间隔，参数2表示初次执行计时器，单位均为毫秒。参数2可缺省）
-$archer->tickExecute(1000, 500); 
-```
 ### 在Task内获取当前的Taskid
 ```php
 \Swlib\Archer\Task::getCurrentTaskId(): ?int;
@@ -294,20 +248,17 @@ Archer会抛出以下几种异常：
 ###### *假设所有场景均已处于协程环境之中；场景都是理想化，简易化的；除了例子中使用的闭包，Archer支持所有[callable类型](http://php.net/manual/zh/language.types.callable.php)
 #### 场景：记录用户操作时间，但并不关心执行结果，也不想等待SQL执行完
 ```php
-\Swlib\Archer::psr()
-    ->setTaskCallback(function(int $user_id, int $timestamp): void {
-        $swoole_mysql = new Swoole\Coroutine\MySQL();
-        $swoole_mysql->connect([
-            'host' => '127.0.0.1',
-            'port' => 3306,
-            'user' => 'user',
-            'password' => 'pass',
-            'database' => 'test',
-        ]);
-        $swoole_mysql->prepare('UPDATE `user` SET `optime`=? WHERE `id`=?')->execute([$timestamp, $user_id], 10);
-    })
-    ->setParams(1, time())
-    ->asyncExecute();
+\Swlib\Archer::task(function(int $user_id, int $timestamp): void {
+    $swoole_mysql = new Swoole\Coroutine\MySQL();
+    $swoole_mysql->connect([
+        'host' => '127.0.0.1',
+        'port' => 3306,
+        'user' => 'user',
+        'password' => 'pass',
+        'database' => 'test',
+    ]);
+    $swoole_mysql->prepare('UPDATE `user` SET `optime`=? WHERE `id`=?')->execute([$timestamp, $user_id], 10);
+}, [1, time()]);
 ```
 #### 场景：执行某些协程Client（或由[Runtime::enableCoroutine()](https://wiki.swoole.com/wiki/page/965.html)变为协程的传统Client）时，未开启或无法开启[Defer特性](https://wiki.swoole.com/wiki/page/p-coroutine_multi_call.html)，但又想使用Defer功能。
 ```php
@@ -373,8 +324,7 @@ for ($id=1; $id<=20; ++$id)
 #### 场景：并发20条SQL，并将结果发给20个用户，每条运行完就立刻发送。
 ```php
 $container = \Swlib\Archer::getMultiTask();
-$archer = \Swlib\Archer::psr();
-$archer->setTaskCallback(function(int $id): int {
+$task_callback = function(int $id): int {
     $mysql = new Swoole\Coroutine\MySQL();
     $mysql->connect([
         'host' => '127.0.0.1',
@@ -385,10 +335,10 @@ $archer->setTaskCallback(function(int $id): int {
     $result = $mysql->query('SELECT COUNT(*) AS `c` FROM `order` WHERE `user`='.id);
     if (empty($result)) return 0;
     return current($result)['c'] ?? 0;
-});
+};
 $map = [];
 for ($id=1; $id<=20; ++$id) {
-    $taskid = $archer->setParams($id)->attachToMultiTask($container);
+    $taskid = $container->addTask($task_callback, [$id]);
     $map[$taskid] = $id;
 }
 
@@ -403,13 +353,13 @@ foreach ($map as $taskid => $id)
 ```
 #### 场景：计时器，2.5秒后开始第一次，之后每5秒执行一次，共8次
 ```php
-\Swlib\Archer::taskTimerTick(5000, function(int $limit) {
+\Swlib\Archer::taskTimerTick(5, function(int $limit) {
     static $count = 0;
     ++ $count;
     echo "$count\n";
     if ($count >= $limit)
         \Swlib\Archer::clearTimerTask(\Swlib\Archer\Task::getCurrentTaskId());
-}, [8], 2500);
+}, [8], 2.5);
 ```
 
 ------
