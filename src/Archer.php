@@ -186,9 +186,4 @@ abstract class Archer
     {
         return new Archer\MultiTask();
     }
-
-    public static function psr(): self
-    {
-        return new \Swlib\Archer();
-    }
 }
