@@ -60,6 +60,13 @@ class Queue
         return self::$instance;
     }
 
+    public static function stop(): void
+    {
+        if (isset(self::$instance) && isset(self::$instance->channel_queuing)) {
+            self::$instance->channel_queuing->close();
+        }
+    }
+
     public function push(Task $task): bool
     {
         return $this->channel_queuing->push($task);
@@ -69,6 +76,9 @@ class Queue
     {
         do {
             $task = $this->channel_queuing->pop();
+            if ($task === false) {
+                return;
+            }
             if (!$task instanceof Task) {
                 throw new Exception\RuntimeException('Channel pop error');
             }

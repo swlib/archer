@@ -211,6 +211,13 @@ $taskid = \Swlib\Archer::taskTimerTick(1.5, function() { echo 'aaa'; });
 ```
 在Task执行中，调用该方法可以获取当前的Taskid，在其他地方调用会返回null（该方法基于协程uid缓存）
 
+### 终止事件循环
+调用此方法以防止循环使得进程事件循环不能结束
+```php
+\Swlib\Archer\Queue::stop(): void;
+\Swlib\Archer\TimerHeap::stop(): void;
+```
+
 ### ~~注册一个全局回调函数~~
 `swoole>=4.2.9`版本推荐在项目使用Context的时候通过[Coroutine::defer()](https://wiki.swoole.com/wiki/page/1015.html)注册清理函数，无需在此注册
 ```php

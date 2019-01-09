@@ -155,7 +155,7 @@ abstract class Archer
      * @param float    $tick_time        每次执行间隔时间
      * @param callable $task_callback    需要执行的函数
      * @param array    $params           传递进$task_callback中的参数，可缺省
-     * @param int      $first_time_after 初次执行时间；若缺省，则初次执行时间为$tick_time
+     * @param float    $first_time_after 初次执行时间；若缺省，则初次执行时间为$tick_time
      *
      * @return int Task的id
      */

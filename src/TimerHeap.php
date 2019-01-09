@@ -39,6 +39,13 @@ class TimerHeap extends \SplHeap
 
         return self::$instance;
     }
+    
+    public static function stop(): void
+    {
+        if (isset(self::$instance) && isset(self::$instance->receiver)) {
+            self::$instance->receiver->close();
+        }
+    }
 
     public function loop(): void
     {
@@ -46,8 +53,11 @@ class TimerHeap extends \SplHeap
         $this->receiver = new \Swoole\Coroutine\Channel();
         do {
             $this->receive_flag = true;
-            $this->receiver->pop();
+            $result = $this->receiver->pop();
             $this->receive_flag = false;
+            if ($result === false) {
+                return;
+            }
             if (SWOOLE_CHANNEL_OK !== $this->receiver->errCode) {
                 throw new Exception\RuntimeException('Channel pop error');
             }
