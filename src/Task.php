@@ -70,7 +70,7 @@ abstract class Task
         try {
             $uid = \Swoole\Coroutine::getuid();
             self::$taskid_map[$uid] = $this->id;
-            $ret = ($this->task_callback)(...$this->params);
+            $ret = ($this->task_callback)($this->params);
             $return = null;
             if (isset(self::$finish_func)) {
                 (self::$finish_func)($this->id, $ret, null);
