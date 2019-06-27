@@ -19,6 +19,9 @@ class MultiTask implements \Countable
     private const TYPE_WAIT_FOR_ALL = 0;
     private const TYPE_YIELD_EACH_ONE = 1;
     private static $counter = 0;
+    private $max_concurrent;
+    private $max_concurrent_queue;
+    private $running_task;
     private $id;
     private $result_map;
     private $error_map;
@@ -33,8 +36,13 @@ class MultiTask implements \Countable
      */
     private $task_ids;
 
-    public function __construct()
+    public function __construct(?int $max_concurrent = null)
     {
+        if (isset($max_concurrent)) {
+            $this->max_concurrent = $max_concurrent;
+            $this->max_concurrent_queue = new \SplQueue();
+        }
+        $this->running_task = 0;
         $this->id = ++self::$counter;
         $this->status = self::STATUS_PREPARING;
         $this->result_map = [];
@@ -67,8 +75,13 @@ class MultiTask implements \Countable
         $task = new Task\CoPackUnit($task_callback, $params, $this);
         $this->task_ids[$task->getId()] = null;
         ++$this->size;
-        if (!Queue::getInstance()->push($task)) {
-            throw new Exception\AddNewTaskFailException();
+        if (isset($this->max_concurrent_queue) && $this->running_task >= $this->max_concurrent) {
+            $this->max_concurrent_queue->push($task);
+        } else {
+            ++$this->running_task;
+            if (!Queue::getInstance()->push($task)) {
+                throw new Exception\AddNewTaskFailException();
+            }
         }
 
         return $task->getId();
@@ -292,14 +305,20 @@ class MultiTask implements \Countable
 
     private function notifyReceiver(int $id)
     {
-        if (!isset($this->result_receiver)) {
-            return;
+        --$this->running_task;
+        if (isset($this->result_receiver)) {
+            if (self::TYPE_YIELD_EACH_ONE === $this->type) {
+                $this->result_receiver->push($id);
+            } elseif (0 === $this->getUnfinishedTaskCount()) {
+                $this->status = self::STATUS_DONE;
+                $this->result_receiver->push(true);
+            }
         }
-        if (self::TYPE_YIELD_EACH_ONE === $this->type) {
-            $this->result_receiver->push($id);
-        } elseif (0 === $this->getUnfinishedTaskCount()) {
-            $this->status = self::STATUS_DONE;
-            $this->result_receiver->push(true);
+        if (isset($this->max_concurrent_queue) && !$this->max_concurrent_queue->isEmpty() && $this->running_task < $this->max_concurrent) {
+            ++$this->running_task;
+            if (!Queue::getInstance()->push($this->max_concurrent_queue->pop())) {
+                throw new Exception\AddNewTaskFailException();
+            }
         }
     }
 }

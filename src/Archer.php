@@ -179,11 +179,13 @@ abstract class Archer
 
     /**
      * 获取多Task的处理容器，每次执行都是获取一个全新的对象
+     * 
+     * @param int $max_concurrent 该处理容器中的最大并行数量
      *
      * @return Archer\MultiTask
      */
-    public static function getMultiTask(): Archer\MultiTask
+    public static function getMultiTask(?int $max_concurrent = null): Archer\MultiTask
     {
-        return new Archer\MultiTask();
+        return new Archer\MultiTask($max_concurrent);
     }
 }
