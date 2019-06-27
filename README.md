@@ -133,7 +133,8 @@ $task->recv(0.5);
 ### 模式4：Task集模式
 获取容器：
 ```php
-$container = \Swlib\Archer::getMultiTask();
+// $max_concurrent表示集内最大并行数量，缺省表示不限制
+$container = \Swlib\Archer::getMultiTask(?int $max_concurrent = null);
 ```
 向队列投递Task并立即返回Task id。
 ```php
