@@ -79,46 +79,16 @@ go(function () {
 
 ## 接口
 所有模式的Task在执行时所处的协程与原协程不是同一个，所以**所有基于[Context](https://wiki.swoole.com/wiki/page/865.html)的变量传递与维护会失效**，务必注意这一点。  
-### 模式1：伪异步模式
-```php
-\Swlib\Archer::task(callable $task_callback, ?array $params = null, ?callable $finish_callback = null): int;
-```
-- `$task_callback` 待执行的函数，
-- `$params` 传入`$task_callback`中的参数，可缺省
-- `$finish_callback` Task执行完之后的回调，可缺省，格式如下：
-
-```php
-function (int $task_id, $task_return_value, ?\Throwable $e) {
-    // $task_id 为\Swlib\Archer::task() 返回的Task id
-    // $task_return_value 为Task闭包 $task_callback 的返回值，若没有返回值或抛出了异常，则该项为null
-    // $e为Task闭包 $task_callback 中抛出的异常，正常情况下为null
-}
-```
-| 返回模式 | 协程说明 | 异常处理 |
-| :-- | :-- | :-- |
-| 返回 Taskid | $task_callback与$finish_callback处于同一个协程，但与当前协程不处于同一个 | 通过第3个参数传递给$finish_callback，若缺省则会产生一个warning |
-### 模式2：协程同步返回模式
-（该模式与直接执行协程代码的区别在于：会进入Task队列，受队列的size和最大并发影响；运行于不同的协程）
-```php
-\Swlib\Archer::taskWait(callable $task_callback, ?array $params = null, ?float $timeout = null): mixed;
-```
-- `$task_callback` 待执行的函数，
-- `$params` 传入`$task_callback`中的参数，可缺省
-- `$timeout` 超时时间，超时后函数会直接抛出`Swlib\Archer\Exception\TaskTimeoutException`。注意：超时返回后Task仍会继续执行，不会中断，不会移出队列。若缺省则表示不会超时
-
-| 返回模式 | 协程说明 | 异常处理 |
-| :-- | :-- | :-- |
-| 当前协程挂起，直到Task执行完成并返回结果 | $task_callback与当前协程不是同一个 | 若Task抛出了任何异常，Archer会捕获后在这里抛出。 |
-### 模式3：Defer模式
+### 模式1：Defer模式 (即CSP模型)
 获取Task：
 ```php
 /*定义*/ \Swlib\Archer::taskDefer(callable $task_callback, ?array $params = null): \Swlib\Archer\Task\Defer;
 $task = \Swlib\Archer::taskDefer($task_callback, ['foo', 'bar']);
 ```
 
-| 返回模式 | 协程说明 | 异常处理 |
-| :-- | :-- | :-- |
-| 返回Task对象 | $task_callback与当前协程不是同一个 | 若Task抛出了任何异常，Archer会捕获后在执行recv时抛出。 |
+| 返回模式 | 异常处理 |
+| :-- | :-- |
+| 返回Task对象 | 若Task抛出了任何异常，Archer会捕获后在执行recv时抛出。 |
 
 获取执行结果：
 ```php
@@ -127,10 +97,10 @@ $task->recv(0.5);
 ```
 - `$timeout` 超时时间，超时后函数会直接抛出`Swlib\Archer\Exception\TaskTimeoutException`。注意：超时返回后Task仍会继续执行，不会中断，不会移出队列。若缺省则表示不会超时
 
-| 返回模式 | 协程说明 | 异常处理 |
-| :-- | :-- | :-- |
-| 若Task已执行完则直接返回结果。否则协程挂起，等待执行完毕后恢复并返回结果。 | $task_callback与当前协程不是同一个 | 若Task抛出了任何异常，Archer会捕获后会在此处抛出。 |
-### 模式4：Task集模式
+| 返回模式 | 异常处理 |
+| :-- | :-- |
+| 若Task已执行完则直接返回结果。否则协程挂起，等待执行完毕后恢复并返回结果。 | 若Task抛出了任何异常，Archer会捕获后会在此处抛出。 |
+### 模式2：Task集模式
 获取容器：
 ```php
 // $max_concurrent表示集内最大并行数量，缺省表示不限制
@@ -147,9 +117,9 @@ $container->waitForAll(?float $timeout = null): array;
 ```
 - `$timeout` 超时时间，超时后函数会直接抛出`Swlib\Archer\Exception\TaskTimeoutException`。注意：超时返回后所有Task仍会继续执行，不会中断，不会移出队列。若缺省则表示不会超时
 
-| 返回模式 | 协程说明 | 异常处理 |
-| :-- | :-- | :-- |
-| 若运行时所有Task已执行完，则会直接以键值对的形式返回所有Task的返回值。否则当前协程挂起。当所有Task执行完成后，会恢复投递的协程，并返回结果。 | 所有Task所处协程均不同 | 若某个Task抛出了任何异常，不会影响其他Task的执行，但在返回值中不会出现该Task id对应的项，需要通过`getError(int $taskid)`或`getErrorMap()`方法获取异常对象 |
+| 返回模式 | 异常处理 |
+| :-- | :-- |
+| 若运行时所有Task已执行完，则会直接以键值对的形式返回所有Task的返回值。否则当前协程挂起。当所有Task执行完成后，会恢复投递的协程，并返回结果。 | 若某个Task抛出了任何异常，不会影响其他Task的执行，但在返回值中不会出现该Task id对应的项，需要通过`getError(int $taskid)`或`getErrorMap()`方法获取异常对象 |
 ###### 先完成先返回：各Task的执行结果会根据其完成的顺序，以键值对的形式yield出来
 对于生成器(Generator)的定义：[查看](http://php.net/manual/zh/class.generator.php)
 ```php
@@ -158,9 +128,9 @@ $container->yieldEachOne(?float $timeout = null): \Generator;
 - `$timeout` 超时时间，超时后函数会直接抛出`Swlib\Archer\Exception\TaskTimeoutException`（该时间表示花费在本方法内的时间，外界调用该方法处理每个返回值所耗费的时间不计入）。注意：超时返回后所有Task仍会继续执行，不会中断，不会移出队列。若缺省则表示不会超时
 - 生成器遍历完成后，可以通过 `Generator->getReturn()` 方法获取返回值的键值对
 
-| 返回模式 | 协程说明 | 异常处理 |
-| :-- | :-- | :-- |
-| 若运行时已经有些Task已执行完，则会按执行完毕的顺序将他们先yield出来。若这之后仍存在未执行完的Task，则当前协程将会挂起，每有一个Task执行完，当前协程将恢复且其结果就会以以键值对的方式yield出来，然后协程会挂起等待下一个执行完的Task。 | 所有Task所处协程均不同 | 若某个Task抛出了任何异常，不会影响其他Task的执行，但这个Task不会被`yield`出来，需要通过`getError(int $taskid)`或`getErrorMap()`方法获取异常对象 |
+| 返回模式 | 异常处理 |
+| :-- | :-- |
+| 若运行时已经有些Task已执行完，则会按执行完毕的顺序将他们先yield出来。若这之后仍存在未执行完的Task，则当前协程将会挂起，每有一个Task执行完，当前协程将恢复且其结果就会以以键值对的方式yield出来，然后协程会挂起等待下一个执行完的Task。 | 若某个Task抛出了任何异常，不会影响其他Task的执行，但这个Task不会被`yield`出来，需要通过`getError(int $taskid)`或`getErrorMap()`方法获取异常对象 |
 
 获取某Task抛出的异常（若Task未抛出异常则返回null）
 ```php
@@ -170,7 +140,7 @@ $container->getError(int $id): ?\Throwable;
 ```php
 $container->getErrorMap(): array;
 ```
-### 模式5：一次性计时器模式
+### 模式3：一次性计时器模式
 该模式的Task不受[队列配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)的影响  
 （该模式与直接使用co::sleep()执行协程代码的区别在于：不直接切换走当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
 ```php
@@ -178,16 +148,16 @@ $container->getErrorMap(): array;
 ```
 - `$after_time` 计时时间，单位为秒
 
-| 返回模式 | 协程说明 | 异常处理 |
-| :-- | :-- | :-- |
-| 返回 Taskid | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warning |
+| 返回模式 | 异常处理 |
+| :-- | :-- |
+| 返回 Taskid | Archer会捕获异常，并产生一个warning |
 
 取消执行：
 ```php
 $taskid = \Swlib\Archer::taskTimerAfter(1.5, function() { echo 'aaa'; });
 \Swlib\Archer::clearTimerTask($taskid); // 返回true为成功，若已执行则返回false
 ```
-### 模式6：持续型计时器模式
+### 模式4：持续型计时器模式
 该模式的Task不受[队列配置](https://github.com/swlib/archer#%E9%85%8D%E7%BD%AE)的影响  
 （该模式与直接使用co::sleep()执行协程代码的区别在于：不直接切换走当前协程；底层经过算法优化，会减少并行sleep()的协程数量，节约内存；可以在执行之前清除掉计时器；运行于不同的协程）
 ```php
@@ -196,9 +166,9 @@ $taskid = \Swlib\Archer::taskTimerAfter(1.5, function() { echo 'aaa'; });
 - `$tick_time` 执行间隔，单位为秒
 - `$first_time_after` 初次执行计时器，单位为秒。若缺省则与`$tick_time`相同
 
-| 返回模式 | 协程说明 | 异常处理 |
-| :-- | :-- | :-- |
-| 返回 Taskid | $task_callback与当前协程不是同一个 | Archer会捕获异常，并产生一个warning |
+| 返回模式 | 异常处理 |
+| :-- | :-- |
+| 返回 Taskid | Archer会捕获异常，并产生一个warning |
 
 取消执行：
 ```php
@@ -254,20 +224,6 @@ Archer会抛出以下几种异常：
 
 ## 例子
 ###### *假设所有场景均已处于协程环境之中；场景都是理想化，简易化的；除了例子中使用的闭包，Archer支持所有[callable类型](http://php.net/manual/zh/language.types.callable.php)
-#### 场景：记录用户操作时间，但并不关心执行结果，也不想等待SQL执行完
-```php
-\Swlib\Archer::task(function(int $user_id, int $timestamp): void {
-    $swoole_mysql = new Swoole\Coroutine\MySQL();
-    $swoole_mysql->connect([
-        'host' => '127.0.0.1',
-        'port' => 3306,
-        'user' => 'user',
-        'password' => 'pass',
-        'database' => 'test',
-    ]);
-    $swoole_mysql->prepare('UPDATE `user` SET `optime`=? WHERE `id`=?')->execute([$timestamp, $user_id], 10);
-}, [1, time()]);
-```
 #### 场景：执行某些协程Client（或由[Runtime::enableCoroutine()](https://wiki.swoole.com/wiki/page/965.html)变为协程的传统Client）时，未开启或无法开启[Defer特性](https://wiki.swoole.com/wiki/page/p-coroutine_multi_call.html)，但又想使用Defer功能。
 ```php
 $task_redis = \Swlib\Archer::taskDefer(function() {
@@ -314,7 +270,7 @@ $task_callback = function(int $id): int {
 $map = [];
 $map2 = [];
 $results = [];
-for ($id=1; $id<=20; ++$id) {// 我知道这个可以用 GROUP BY 一条SQL实现，这里只是举个例子
+for ($id=1; $id<=20; ++$id) {// 虽然用 GROUP BY 一条SQL实现，这里只是举个例子
     $taskid = $container->addTask($task_callback, [$id]);
     $map[$taskid] = $id;
     $map2[$id] = $taskid;
@@ -351,7 +307,7 @@ for ($id=1; $id<=20; ++$id) {
 }
 
 foreach ($container->yieldEachOne(10) as $taskid=>$count) {
-    $server->send($map[$taskid], $count); // 不要纠结为什么 fd 和 id 取值一样，这只是一个简化的场景例子，正式应用肯定更复杂
+    $server->send($map[$taskid], $count); // 假设 fd 和 id 取值一样，这只是一个简化的场景例子，正式应用肯定更复杂
     unset($map[$taskid]);
 }
 
