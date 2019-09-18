@@ -21,7 +21,7 @@
 
 ## 安装
 
-最好的安装方法是通过 [Composer](http://getcomposer.org/) 包管理器 :**（然而现在暂时并不支持这么安装，正在与官方争取加入swlib）**
+最好的安装方法是通过 [Composer](http://getcomposer.org/) 包管理器 :
 
 ```shell
 composer require swlib/archer
