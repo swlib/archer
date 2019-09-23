@@ -185,10 +185,10 @@ class MultiTask implements \Countable
         $count = \count($this->result_map);
         $outside_time_cost = 0;
         foreach ($this->result_map as $k => $v) {
-            --$count;
             if (0 === $count) {
                 break;
             }
+            --$count;
             $yield_time = microtime(true);
             yield $k => $v;
             $outside_time_cost += microtime(true) - $yield_time;
