@@ -31,7 +31,7 @@ class Async extends \Swlib\Archer\Task
                 $this->finish_callback = null;
             } else {
                 trigger_error(
-                    "Throwable catched in Atcher async task, but no finish callback found:{$e->getMessage()} in {$e->getFile()}({$e->getLine()})"
+                    "Throwable catched in Archer async task, but no finish callback found:{$e->getMessage()} in {$e->getFile()}({$e->getLine()})"
                 );
             }
         } elseif (isset($this->finish_callback)) {
