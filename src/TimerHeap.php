@@ -39,7 +39,7 @@ class TimerHeap extends \SplHeap
 
         return self::$instance;
     }
-    
+
     public static function stop(): void
     {
         if (isset(self::$instance) && isset(self::$instance->receiver)) {
@@ -148,6 +148,18 @@ class TimerHeap extends \SplHeap
         return true;
     }
 
+    public function tick(bool $has_registered = true): void
+    {
+        if ($has_registered) {
+            $this->tick_heap->extract();
+        }
+
+        // 如果队列正在执行状态，是无需再注册Tick的。因为当队列遇到一个时间未到的Task后会自动注册Tick
+        if ($this->receive_flag) {
+            $this->receiver->push(true);
+        }
+    }
+
     protected function compare($task_id_1, $task_id_2)
     {
         $time_offset = $this->time_map[$task_id_2] - $this->time_map[$task_id_1];
@@ -172,24 +184,12 @@ class TimerHeap extends \SplHeap
             }
         }
         $this->tick_heap->insert($tick_timestamp_ms);
-        $func = function () use ($after_ms) {
+        $self = $this;
+        \Swoole\Coroutine::create(function () use ($after_ms, $self) {
             \Swoole\Coroutine::sleep(round($after_ms / 1000 + 0.0005, 3));
-            $this->tick();
-        };
-        \Swoole\Coroutine::create($func->bindTo($this));
+            $self->tick();
+        });
 
         return true;
-    }
-
-    private function tick(bool $has_registered = true): void
-    {
-        if ($has_registered) {
-            $this->tick_heap->extract();
-        }
-
-        // 如果队列正在执行状态，是无需再注册Tick的。因为当队列遇到一个时间未到的Task后会自动注册Tick
-        if ($this->receive_flag) {
-            $this->receiver->push(true);
-        }
     }
 }
