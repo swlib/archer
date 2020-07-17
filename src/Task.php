@@ -13,7 +13,6 @@ namespace Swlib\Archer;
 
 abstract class Task
 {
-    protected static $taskid_map = [];
     protected static $finish_func;
     protected $task_callback;
     protected $params;
@@ -34,12 +33,7 @@ abstract class Task
      */
     public static function getCurrentTaskId(): ?int
     {
-        $uid = \Swoole\Coroutine::getuid();
-        if (array_key_exists($uid, self::$taskid_map)) {
-            return self::$taskid_map[$uid];
-        }
-
-        return null;
+        return \Swoole\Coroutine::getContext()->swlib_archer_taskid ?? null;
     }
 
     /**
@@ -68,8 +62,8 @@ abstract class Task
         }
 
         try {
-            $uid = \Swoole\Coroutine::getuid();
-            self::$taskid_map[$uid] = $this->id;
+            $context = \Swoole\Coroutine::getContext();
+            $context->swlib_archer_taskid = $this->id;
             $ret = ($this->task_callback)(...$this->params);
             $return = null;
             if (isset(self::$finish_func)) {
@@ -81,7 +75,7 @@ abstract class Task
                 (self::$finish_func)($this->id, null, $e);
             }
         }
-        unset(self::$taskid_map[$uid]);
+        $context->swlib_archer_taskid = null;
         if ($clear_after_finish) {
             $this->task_callback = null;
             $this->params = null;
